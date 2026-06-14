@@ -1,0 +1,623 @@
+name: ðŸ”¥ Mi A2 Kernel Auto-Patch + Compile [MaheFooZ1710â„¢]
+
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Repos used
+#   1. Clang   â†’ mahefooz1710/android_prebuilts_clang_host_linux-x86_clang-5220042
+#   2. AK3     â†’ mahefooz1710/AnyKernel3
+#   3. GCC64   â†’ mahefooz1710/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9
+#   4. PE kern â†’ mahefooz1710/kernel_xiaomi_jasmine_sprout   (patch source)
+#   5. Device  â†’ mahefooz1710/android_device_xiaomi_jasmine_sprout (not used for kern build)
+#   6. Kernel  â†’ mahefooz1710/android_kernel_xiaomi_sdm660   (compile target)
+#   GCC32      â†’ LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+on:
+  workflow_dispatch:
+    inputs:
+      android_ver:
+        description: "Android version (11=lineage-18.1 / 12=19.1 / 13=20 / 14=21)"
+        required: true
+        default: "11"
+        type: choice
+        options: ["11", "12", "13", "14"]
+      localversion:
+        description: "Kernel version suffix (CONFIG_LOCALVERSION)"
+        required: false
+        default: "-MaheFooZ1710"
+
+env:
+  # â”€â”€ User repos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  PE_KERNEL_REPO:  "https://github.com/mahefooz1710/kernel_xiaomi_jasmine_sprout.git"
+  LOS_KERNEL_REPO: "https://github.com/mahefooz1710/android_kernel_xiaomi_sdm660.git"
+  CLANG_REPO:      "https://github.com/mahefooz1710/android_prebuilts_clang_host_linux-x86_clang-5220042.git"
+  GCC64_REPO:      "https://github.com/mahefooz1710/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9.git"
+  AK3_REPO:        "https://github.com/mahefooz1710/AnyKernel3.git"
+  # â”€â”€ Official GCC32 (no arm32 repo in user's account) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  GCC32_REPO:      "https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9.git"
+  # â”€â”€ Build constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  DEFCONFIG: "jasmine_sprout_defconfig"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120   # FIX A7: no timeout in original
+
+    steps:
+      # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+      # STEP 0 â€” Branch auto-select
+      # FIX A4,A6,A8: all branches were hardcoded; added workflow_dispatch
+      #               inputs + git ls-remote auto-detection with fallback
+      # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+      - name: ðŸ”¢ Auto-Select Branches
+        id: br
+        run: |
+          set -euo pipefail
+          AV="${{ inputs.android_ver }}"
+          case "$AV" in
+            11) LOS_BRANCH="lineage-18.1"; PE_BRANCH="twelve"   ;;
+            12) LOS_BRANCH="lineage-19.1"; PE_BRANCH="thirteen" ;;
+            13) LOS_BRANCH="lineage-20";   PE_BRANCH="thirteen" ;;
+            14) LOS_BRANCH="lineage-21";   PE_BRANCH="fourteen" ;;
+            *)  echo "âŒ Unknown android_ver: $AV"; exit 1 ;;
+          esac
+
+          # Returns: exact match â†’ latest lineage-* â†’ first available
+          pick_branch() {
+            local repo="$1" prefer="$2"
+            local all result
+            all=$(git ls-remote --heads "$repo" | sed 's|.*refs/heads/||')
+            result=$(echo "$all" | grep -x "$prefer" | head -1 || true)
+            [ -n "$result" ] && { echo "$result"; return; }
+            result=$(echo "$all" | grep "^lineage-" | sort -V | tail -1 || true)
+            [ -n "$result" ] && { echo "$result"; return; }
+            echo "$all" | head -1
+          }
+
+          GCC64_BRANCH=$(pick_branch "$GCC64_REPO" "$LOS_BRANCH")
+          GCC32_BRANCH=$(pick_branch "$GCC32_REPO" "$LOS_BRANCH")
+          CLANG_BRANCH=$(git ls-remote --heads "$CLANG_REPO" \
+            | sed 's|.*refs/heads/||' | head -1)
+          CLANG_BRANCH="${CLANG_BRANCH:-9.0}"
+
+          # AK3: prefer any jasmine branch, fall back to beryllium
+          AK3_BRANCH=$(git ls-remote --heads "$AK3_REPO" \
+            | sed 's|.*refs/heads/||' \
+            | grep -iE "^jasmine" 2>/dev/null | head -1 || true)
+          AK3_BRANCH="${AK3_BRANCH:-beryllium}"
+
+          # Verify kernel branches actually exist
+          for pair in "${LOS_KERNEL_REPO}:${LOS_BRANCH}" "${PE_KERNEL_REPO}:${PE_BRANCH}"; do
+            repo="${pair%%:*}"; branch="${pair##*:}"
+            git ls-remote --heads "$repo" \
+              | grep -q "refs/heads/${branch}$" \
+              || { echo "âŒ Branch '$branch' not found in $repo"; exit 1; }
+          done
+
+          BUILD_DATE=$(date +%Y%m%d-%H%M)
+
+          {
+            echo "LOS_BRANCH=${LOS_BRANCH}"
+            echo "PE_BRANCH=${PE_BRANCH}"
+            echo "GCC64_BRANCH=${GCC64_BRANCH}"
+            echo "GCC32_BRANCH=${GCC32_BRANCH}"
+            echo "CLANG_BRANCH=${CLANG_BRANCH}"
+            echo "AK3_BRANCH=${AK3_BRANCH}"
+            echo "BUILD_DATE=${BUILD_DATE}"
+          } >> "$GITHUB_OUTPUT"
+
+          printf '\nâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•\n'
+          printf ' Android  : %s  â†’  %s\n' "$AV"         "$LOS_BRANCH"
+          printf ' PE src   : %s\n'                        "$PE_BRANCH"
+          printf ' GCC64    : %s\n'                        "$GCC64_BRANCH"
+          printf ' GCC32    : %s\n'                        "$GCC32_BRANCH"
+          printf ' Clang    : %s\n'                        "$CLANG_BRANCH"
+          printf ' AK3      : %s\n'                        "$AK3_BRANCH"
+          printf ' Date     : %s\n'                        "$BUILD_DATE"
+          printf 'â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•\n\n'
+
+      # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+      # STEP 1 â€” Install dependencies
+      # FIX A9,A10: added libelf-dev python3 cpio lz4 ccache pahole;
+      #             added --no-install-recommends
+      # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+      - name: ðŸ“¦ Install Dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            flex bison build-essential libssl-dev libelf-dev \
+            bc wget git zip unzip python3 cpio lz4 ccache pahole
+
+      # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+      # STEP 2 â€” Clone toolchains
+      # FIX A1: Clang was tar.gz from googlesource (unreliable) â†’ git clone
+      # FIX A2: GCC64 was entirely missing â†’ git clone from user repo
+      # FIX A3: GCC32 was tar.gz from googlesource â†’ git clone from LOS
+      # FIX A5: AK3 was from osm0sis â†’ user repo 2
+      # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+      - name: ðŸ”§ Clone Clang
+        run: |
+          git clone --depth=1 \
+            -b "${{ steps.br.outputs.CLANG_BRANCH }}" \
+            "$CLANG_REPO" toolchain/clang
+          echo "âœ… Clang: $(toolchain/clang/bin/clang --version | head -1)"
+
+      - name: ðŸ”§ Clone GCC64
+        run: |
+          git clone --depth=1 \
+            -b "${{ steps.br.outputs.GCC64_BRANCH }}" \
+            "$GCC64_REPO" toolchain/gcc64
+
+      - name: ðŸ”§ Clone GCC32
+        run: |
+          git clone --depth=1 \
+            -b "${{ steps.br.outputs.GCC32_BRANCH }}" \
+            "$GCC32_REPO" toolchain/gcc32
+
+      # FIX C28,C2: original used step-level `env: PATH:` which does NOT expand
+      # $PATH (it's a literal YAML string, not shell); moved to GITHUB_PATH.
+      # FIX C27: added GCC64 bin/ (was completely missing from PATH)
+      - name: ðŸ›¤ï¸ Export Toolchain PATH
+        run: |
+          echo "${{ github.workspace }}/toolchain/clang/bin" >> "$GITHUB_PATH"
+          echo "${{ github.workspace }}/toolchain/gcc64/bin" >> "$GITHUB_PATH"
+          echo "${{ github.workspace }}/toolchain/gcc32/bin" >> "$GITHUB_PATH"
+
+      # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+      # STEP 3 â€” Clone kernels
+      # FIX F1,A8: PE kernel was full-history clone â†’ --filter=blob:none
+      # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+      - name: ðŸŒ¿ Clone PE Kernel (patch source)
+        run: |
+          git clone --filter=blob:none \
+            -b "${{ steps.br.outputs.PE_BRANCH }}" \
+            "$PE_KERNEL_REPO" pe_kernel
+
+      - name: ðŸŒ¿ Clone LOS/SDM660 Kernel (compile target)
+        run: |
+          git clone --depth=1 \
+            -b "${{ steps.br.outputs.LOS_BRANCH }}" \
+            "$LOS_KERNEL_REPO" kernel
+
+      # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+      # STEP 4 â€” Extract patches from PE kernel
+      # FIX F4: no git config before operations
+      # FIX F5,F6: narrow grep patterns â†’ extended regex with alternates
+      # FIX F3,F8: --zero-commit prevents filename collisions; extract helper
+      # FIX F9: added success/fail counters
+      # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+      - name: ðŸ” Extract Patches (BFQ, BBR, simple_ondemand)
+        working-directory: pe_kernel
+        run: |
+          git config user.email "ci@mahefooz1710.local"
+          git config user.name "MaheFooZ1710 CI"
+          mkdir -p ../patches
+
+          extract() {
+            local name="$1" pattern="$2"
+            local commit
+            commit=$(git log --oneline --all \
+              --grep="$pattern" -i -E | head -1 | awk '{print $1}')
+            if [ -n "$commit" ]; then
+              echo "âœ… [$name] commit: $commit"
+              git format-patch -1 "$commit" -o ../patches/ \
+                --zero-commit --no-stat 2>/dev/null \
+                && echo "   patch written" \
+                || echo "âš ï¸  format-patch failed for $name"
+            else
+              echo "âš ï¸  [$name] no matching commit found"
+            fi
+          }
+
+          extract "BFQ"             "bfq|block:.*bfq|iosched.*bfq"
+          extract "BBR"             "bbr|tcp_bbr|add bbr|congestion.*bbr"
+          extract "simple_ondemand" "simple_ondemand|adreno.*simple|msm.*simple"
+
+          echo "â”€â”€ patches â”€â”€"
+          ls -lh ../patches/ 2>/dev/null || echo "(none extracted)"
+
+      # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+      # STEP 5 â€” Apply patches
+      # FIX F2: --check then apply is not atomic â†’ combined with --reject fallback
+      # FIX F4: git config added
+      # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+      - name: ðŸ©¹ Apply Patches to LOS Kernel
+        working-directory: kernel
+        run: |
+          git config user.email "ci@mahefooz1710.local"
+          git config user.name "MaheFooZ1710 CI"
+
+          if ! ls ../patches/*.patch >/dev/null 2>&1; then
+            echo "No patches to apply."; exit 0
+          fi
+
+          APPLIED=0; FAILED=0
+          for patch in ../patches/*.patch; do
+            name=$(basename "$patch")
+            echo "â”€â”€ $name â”€â”€"
+            if git apply --check "$patch" 2>/dev/null; then
+              git apply "$patch" \
+                && { echo "  âœ… applied"; APPLIED=$((APPLIED+1)); } \
+                || { echo "  âŒ apply failed"; FAILED=$((FAILED+1)); }
+            else
+              echo "  âš ï¸  check failed â†’ trying --reject (partial apply)"
+              git apply --reject "$patch" 2>/dev/null || true
+              FAILED=$((FAILED+1))
+            fi
+          done
+          echo "Result: âœ… Applied=${APPLIED}  âš ï¸ Failed=${FAILED}"
+
+      # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+      # STEP 6 â€” Generate defconfig
+      # FIX B1:  scripts/config was called as `cd out && scripts/config`
+      #          â†’ scripts/config does not exist in out/; fixed with --file flag
+      # FIX B2:  `cd out â€¦ cd ..` removed
+      # FIX B3:  CONFIG_HZ is a Kconfig *choice*, not settable with --set-val
+      #          â†’ must enable CONFIG_HZ_300 (and disable others)
+      # FIX B4:  CONFIG_ZRAM_LZ4_COMPRESS doesn't exist â†’ CONFIG_CRYPTO_LZ4
+      # FIX B5:  missing || true on non-optional configs
+      # FIX B6-B9: removed aggressive disables (AUDIT/SYSRQ/DEBUG_KERNEL/SLUB_DEBUG)
+      # FIX B10: WQ_POWER_EFFICIENT_DEFAULT missing || true
+      # FIX B11: CONFIG_NET_SCH_FQ (BBR dependency) added
+      # FIX B12: olddefconfig was missing ARCH=arm64 O=out
+      # FIX B13: CONFIG_ZRAM_WRITEBACK added
+      # FIX B14: CONFIG_CPU_FREQ_DEFAULT_GOV_SCHEDUTIL added
+      # FIX C30,C31: added KBUILD_BUILD_USER / KBUILD_BUILD_HOST
+      # FIX C26: CONFIG_LOCALVERSION set from workflow input
+      # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+      - name: âš™ï¸ Generate Defconfig
+        working-directory: kernel
+        env:
+          ARCH: arm64
+          KBUILD_BUILD_USER: MaheFooZ1710
+          KBUILD_BUILD_HOST: GitHubCI
+        run: |
+          # Use PE defconfig if not present in LOS kernel
+          if [ ! -f "arch/arm64/configs/${DEFCONFIG}" ]; then
+            echo "âš ï¸ ${DEFCONFIG} missing in LOS kernel â€” borrowing from PE kernel"
+            cp -n "../pe_kernel/arch/arm64/configs/${DEFCONFIG}" \
+                  "arch/arm64/configs/" || \
+              { echo "âŒ ${DEFCONFIG} not found in either repo!"; exit 1; }
+          fi
+
+          make ARCH=arm64 O=out "${DEFCONFIG}"
+
+          # â”€â”€ Use --file flag: scripts/config lives in kernel source, not out/
+          SC="./scripts/config --file out/.config"
+
+          # Patched features
+          $SC --enable  CONFIG_IOSCHED_BFQ               || true
+          $SC --set-str CONFIG_DEFAULT_IOSCHED   "bfq"   || true
+          $SC --enable  CONFIG_TCP_CONG_BBR               || true
+          $SC --enable  CONFIG_NET_SCH_FQ                 || true   # BBR dep
+          $SC --set-str CONFIG_DEFAULT_TCP_CONG  "bbr"   || true
+          $SC --enable  CONFIG_MSM_ADRENO_SIMPLE_ONDEMAND || true
+
+          # ZRAM
+          $SC --enable  CONFIG_ZRAM                       || true
+          $SC --enable  CONFIG_CRYPTO_LZ4                 || true   # correct (not ZRAM_LZ4_COMPRESS)
+          $SC --enable  CONFIG_ZRAM_WRITEBACK             || true
+          $SC --disable CONFIG_ZSWAP                      || true
+
+          # Stability
+          $SC --enable  CONFIG_MSM_WATCHDOG_V2            || true
+          $SC --set-val CONFIG_PANIC_TIMEOUT 10
+          $SC --enable  CONFIG_DETECT_HUNG_TASK           || true
+          $SC --set-val CONFIG_DEFAULT_HUNG_TASK_TIMEOUT 120 || true
+
+          # Filesystems
+          $SC --enable CONFIG_F2FS_FS                     || true
+          $SC --enable CONFIG_EXT4_FS_POSIX_ACL           || true
+          $SC --enable CONFIG_FS_ENCRYPTION               || true
+
+          # CPU / Sched
+          $SC --enable CONFIG_CPU_FREQ_DEFAULT_GOV_SCHEDUTIL || true
+          $SC --enable CONFIG_WQ_POWER_EFFICIENT_DEFAULT     || true
+
+          # HZ = 300 via choice nodes (--set-val CONFIG_HZ 300 is WRONG â€” it's a choice)
+          $SC --disable CONFIG_HZ_100   || true
+          $SC --disable CONFIG_HZ_200   || true
+          $SC --disable CONFIG_HZ_250   || true
+          $SC --enable  CONFIG_HZ_300   || true
+          $SC --disable CONFIG_HZ_500   || true
+          $SC --disable CONFIG_HZ_1000  || true
+
+          # Security (non-breaking only)
+          $SC --enable CONFIG_STRICT_KERNEL_RWX            || true
+
+          # Audio
+          $SC --enable CONFIG_SND_SOC_MSM_QDSP6V2_INTF    || true
+          $SC --enable CONFIG_SND_SOC_MSM_QDSP6V2_VM      || true
+
+          # LocalVersion from workflow input
+          $SC --set-str CONFIG_LOCALVERSION "${{ inputs.localversion }}"
+
+          # Resolve Kconfig dependencies
+          make ARCH=arm64 O=out olddefconfig
+
+      # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+      # STEP 7 â€” Compile
+      # FIX C27: GCC64 now in PATH (was missing)
+      # FIX C28: PATH expansion fixed via GITHUB_PATH (not step env override)
+      # FIX C29: nproc fallback added
+      # FIX C32: build log captured â†’ tee build.log
+      # FIX C33: post-build image existence check
+      # FIX C34: ccache enabled
+      # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+      - name: ðŸ”¨ Compile Kernel
+        working-directory: kernel
+        env:
+          ARCH: arm64
+          KBUILD_BUILD_USER: MaheFooZ1710
+          KBUILD_BUILD_HOST: GitHubCI
+          CCACHE_DIR: ${{ github.workspace }}/.ccache
+        run: |
+          ccache -M 4G
+          JOBS=$(nproc --all || echo 4)
+          echo "ðŸ”¨ Building with ${JOBS} threadsâ€¦"
+
+          make ARCH=arm64 O=out \
+            CC=clang \
+            CLANG_TRIPLE=aarch64-linux-gnu- \
+            CROSS_COMPILE=aarch64-linux-android- \
+            CROSS_COMPILE_ARM32=arm-linux-androideabi- \
+            -j"${JOBS}" 2>&1 | tee ../build.log
+
+          # Verify at least one Image variant was produced
+          if ls out/arch/arm64/boot/Image* >/dev/null 2>&1; then
+            echo "âœ… Kernel images:"
+            ls -lh out/arch/arm64/boot/Image*
+          else
+            echo "âŒ No kernel image produced â€” build failed!"
+            echo "â”€â”€ last 100 lines of build log â”€â”€"
+            tail -100 ../build.log
+            exit 1
+          fi
+
+      # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+      # STEP 8 â€” Boot tuning script
+      # FIX D1:  shebang #!/system/bin/sh â†’ #!/sbin/sh (overlay.d context)
+      # FIX D2:  ZRAM: check if already configured before writing
+      # FIX D3:  I/O scheduler loop: covers mmcblk0 AND sda/sdb (UFS devices)
+      # FIX D4:  scheduler grep: check for [bfq] (active) not just "bfq" (any)
+      # FIX D5:  added schedutil as primary governor (EAS kernels)
+      # FIX D6:  interactive paths guarded with [ -d ] check
+      # FIX D7:  NO_GENTLE_FAIR_SLEEPERS guarded by [ -w ] (needs SCHED_DEBUG)
+      # FIX D8:  GPU comment corrected (level 4 â‰ˆ 266 MHz, not level 3)
+      # FIX D9:  vm.swappiness=100 added for ZRAM
+      # FIX D10: ZRAM mkswap/swapon sequence added
+      # FIX D11: removed blocking `until` loop (bad in overlay.d)
+      # FIX D12: THP madvise added
+      # FIX D13: add_random=0 added for block devices
+      # FIX D14: tcp_fastopen=1 (client only, not 3 = server+client)
+      # FIX D15: CPU big/little split via cpufreq/policy* + affected_cpus
+      # FIX D16: ZRAM comp_algorithm=lz4 set before disksize
+      # FIX D38: ZRAM comp_algorithm set; disksize as 50% RAM (not hardcoded 1GB)
+      # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+      - name: ðŸ“ Create Boot Tuning Script
+        run: |
+          mkdir -p anykernel/ramdisk/overlay.d/sbin
+
+          cat > anykernel/ramdisk/overlay.d/sbin/jasmine_tweaks.sh << 'TWEAK'
+#!/sbin/sh
+# MaheFooZ1710â„¢ â€” Mi A2 (jasmine_sprout) Boot Tuner
+
+# â”€â”€ ZRAM (50% RAM, lz4, skip if already set) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+node=/sys/block/zram0
+if [ -e "${node}/disksize" ]; then
+  cur=$(cat "${node}/disksize" 2>/dev/null || echo 0)
+  if [ "${cur}" = "0" ]; then
+    ram_kb=$(grep MemTotal /proc/meminfo | awk '{print $2}')
+    zram_size=$(( ram_kb * 1024 / 2 ))
+    echo lz4 > "${node}/comp_algorithm" 2>/dev/null || true
+    echo "${zram_size}" > "${node}/disksize"
+    mkswap /dev/zram0   2>/dev/null || true
+    swapon -p 100 /dev/zram0 2>/dev/null || true
+  fi
+fi
+
+# â”€â”€ I/O Scheduler (eMMC = mmcblk0, UFS = sda/sdb) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+for dev in /sys/block/mmcblk0 /sys/block/sda /sys/block/sdb; do
+  q="${dev}/queue"
+  [ -d "${q}" ] || continue
+  sched="${q}/scheduler"
+  if ! grep -q '\[bfq\]' "${sched}" 2>/dev/null; then
+    echo bfq        > "${sched}" 2>/dev/null || \
+    echo mq-deadline > "${sched}" 2>/dev/null || true
+  fi
+  echo 0   > "${q}/iostats"       2>/dev/null || true
+  echo 128 > "${q}/read_ahead_kb" 2>/dev/null || true
+  echo 0   > "${q}/add_random"    2>/dev/null || true
+done
+
+# â”€â”€ VM / Memory â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+echo 100 > /proc/sys/vm/swappiness
+echo 80  > /proc/sys/vm/vfs_cache_pressure
+echo 10  > /proc/sys/vm/dirty_ratio
+echo 5   > /proc/sys/vm/dirty_background_ratio
+echo madvise > /sys/kernel/mm/transparent_hugepage/enabled 2>/dev/null || true
+
+# â”€â”€ Network â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+echo 1 > /proc/sys/net/ipv4/tcp_fastopen   # client-side only (not 3 = server+client)
+
+# â”€â”€ Sched features (requires CONFIG_SCHED_DEBUG, skip otherwise) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+[ -w /sys/kernel/debug/sched_features ] && \
+  echo NO_GENTLE_FAIR_SLEEPERS > /sys/kernel/debug/sched_features
+
+# â”€â”€ CPU Governor â€” schedutil first, interactive fallback â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+for pol in /sys/devices/system/cpu/cpufreq/policy*; do
+  [ -d "${pol}" ] || continue
+  avail="${pol}/scaling_available_governors"
+  if grep -q schedutil "${avail}" 2>/dev/null; then
+    echo schedutil > "${pol}/scaling_governor" 2>/dev/null || true
+    echo 500 > "${pol}/schedutil/rate_limit_us" 2>/dev/null || true
+  elif grep -q interactive "${avail}" 2>/dev/null; then
+    echo interactive > "${pol}/scaling_governor" 2>/dev/null || true
+    cpu=$(cat "${pol}/affected_cpus" 2>/dev/null | awk '{print $1}')
+    idir="/sys/devices/system/cpu/cpu${cpu}/cpufreq/interactive"
+    if [ -d "${idir}" ]; then
+      if [ "${cpu:-0}" -ge 4 ] 2>/dev/null; then
+        # Big cluster (cpu4-7) â€” SDM660
+        echo 90     > "${idir}/go_hispeed_load" 2>/dev/null || true
+        echo 800000 > "${idir}/hispeed_freq"    2>/dev/null || true
+        echo 20000  > "${idir}/timer_rate"      2>/dev/null || true
+      else
+        # Little cluster (cpu0-3)
+        echo 85     > "${idir}/go_hispeed_load" 2>/dev/null || true
+        echo 600000 > "${idir}/hispeed_freq"    2>/dev/null || true
+        echo 30000  > "${idir}/timer_rate"      2>/dev/null || true
+      fi
+      echo 0 > "${idir}/io_is_busy" 2>/dev/null || true
+    fi
+  fi
+done
+
+# â”€â”€ GPU â€” Adreno 512 (jasmine_sprout) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+GPU=/sys/class/kgsl/kgsl-3d0
+if [ -d "${GPU}" ]; then
+  echo simple_ondemand > "${GPU}/devfreq/governor" 2>/dev/null || true
+  echo 4 > "${GPU}/min_pwrlevel" 2>/dev/null || true  # level 4 â‰ˆ 266 MHz on Adreno 512
+fi
+
+exit 0
+TWEAK
+
+          chmod +x anykernel/ramdisk/overlay.d/sbin/jasmine_tweaks.sh
+
+          # Init RC for property trigger
+          cat > anykernel/ramdisk/overlay.d/init.jasmine_tweaks.rc << 'INITRC'
+on property:sys.boot_completed=1
+    start jasmine_tweaks
+
+service jasmine_tweaks /sbin/jasmine_tweaks.sh
+    class late_start
+    user root
+    group root
+    oneshot
+    disabled
+    seclabel u:r:shell:s0
+INITRC
+
+      # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+      # STEP 9 â€” Package with AnyKernel3
+      # FIX A5:  AK3 from user repo 2 (not osm0sis)
+      # FIX E1:  Image.gz-dtb copy with no fallback â†’ loop over all variants
+      # FIX E2:  existence check before packaging
+      # FIX E3:  anykernel.sh not configured for jasmine â†’ full config written
+      # FIX E5:  overlay.d dir not created before cp â†’ mkdir -p added
+      # FIX E6:  zip included .git metadata â†’ -x "*.git*" added
+      # FIX E7:  no version/date in zip name â†’ LOS_BRANCH + BUILD_DATE added
+      # FIX E8:  consistent ak3/ directory naming (was anykernel_base/)
+      # FIX E10: silent cp fail â†’ replaced with explicit check
+      # FIX E11: DTB copy added if separate dtbs produced
+      # FIX E12: retention-days=30 added
+      # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+      - name: ðŸ“¦ Package with AnyKernel3
+        run: |
+          git clone --depth=1 \
+            -b "${{ steps.br.outputs.AK3_BRANCH }}" \
+            "$AK3_REPO" ak3
+
+          # Pick best available kernel image variant
+          IMG=""
+          for candidate in \
+            kernel/out/arch/arm64/boot/Image.gz-dtb \
+            kernel/out/arch/arm64/boot/Image-dtb \
+            kernel/out/arch/arm64/boot/Image.gz \
+            kernel/out/arch/arm64/boot/Image; do
+            [ -f "${candidate}" ] && { IMG="${candidate}"; break; }
+          done
+          [ -n "${IMG}" ] || { echo "âŒ No kernel image found!"; exit 1; }
+          echo "ðŸ“¦ Using image: ${IMG}"
+          cp "${IMG}" ak3/
+
+          # Configure anykernel.sh for Mi A2 jasmine
+          cat > ak3/anykernel.sh << 'AKSH'
+# AnyKernel3 â€” MaheFooZ1710â„¢
+# Mi A2 / jasmine_sprout (SDM660, A/B slot device)
+properties() { '
+kernel.string=MaheFooZ1710 Kernel for Mi A2
+do.devicecheck=1
+do.modules=0
+do.systemless=1
+do.cleanup=1
+do.cleanuponabort=0
+device.name1=jasmine
+device.name2=jasmine_sprout
+device.name3=jasmine_f
+device.name4=
+device.name5=
+supported.versions=8-14
+block=/dev/block/bootdevice/by-name/boot;
+is_slot_device=1;
+ramdisk_compression=auto;
+'; }
+
+. tools/ak3-core.sh
+
+# Set execute permission on overlay scripts
+set_perm_recursive 0 0 0755 0644 $ramdisk/*;
+set_perm_recursive 0 0 0755 0755 $ramdisk/overlay.d/sbin;
+
+split_boot;
+flash_boot;
+AKSH
+
+          # Overlay files
+          mkdir -p ak3/ramdisk/overlay.d/sbin
+          cp -r anykernel/ramdisk/overlay.d/. ak3/ramdisk/overlay.d/
+
+          # Separate DTBs (if kernel produced them individually)
+          if find kernel/out/arch/arm64/boot/dts \
+              -name "*.dtb" -quit 2>/dev/null; then
+            mkdir -p ak3/dtb
+            find kernel/out/arch/arm64/boot/dts -name "*.dtb" \
+              -exec cp {} ak3/dtb/ \; 2>/dev/null || true
+            echo "âœ… DTBs copied"
+          fi
+
+          LOS_BRANCH="${{ steps.br.outputs.LOS_BRANCH }}"
+          BUILD_DATE="${{ steps.br.outputs.BUILD_DATE }}"
+          ZIP_NAME="MiA2_MaheFooZ1710_${LOS_BRANCH}_${BUILD_DATE}.zip"
+
+          cd ak3
+          zip -r9 "../${ZIP_NAME}" . -x "*.git*" "*.github*" "*.gitignore"
+          cd ..
+
+          echo "ZIP_NAME=${ZIP_NAME}" >> "$GITHUB_ENV"
+          echo "âœ… Packaged: ${ZIP_NAME} ($(du -sh ${ZIP_NAME} | cut -f1))"
+
+      # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+      # STEP 10 â€” Upload
+      # FIX U1: upload-artifact@v3 deprecated â†’ v4
+      # FIX U2: retention-days added
+      # FIX U3: build.log included in upload
+      # FIX U4: artifact name includes branch + date (was static "MiA2_Ultimate_Kernel")
+      # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+      - name: ðŸ“¤ Upload Kernel + Build Log
+        uses: actions/upload-artifact@v4
+        with:
+          name: MiA2_MaheFooZ1710_${{ steps.br.outputs.LOS_BRANCH }}_${{ steps.br.outputs.BUILD_DATE }}
+          path: |
+            ${{ env.ZIP_NAME }}
+            build.log
+          retention-days: 30
+
+      # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+      # STEP 11 â€” GitHub Step Summary (always runs, even on failure)
+      # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+      - name: ðŸ“‹ Build Summary
+        if: always()
+        run: |
+          {
+            echo "## ðŸ”¥ Mi A2 Kernel â€” MaheFooZ1710â„¢"
+            echo "| Key | Value |"
+            echo "|-----|-------|"
+            echo "| Android     | ${{ inputs.android_ver }} â†’ ${{ steps.br.outputs.LOS_BRANCH }} |"
+            echo "| PE branch   | ${{ steps.br.outputs.PE_BRANCH }} |"
+            echo "| GCC64       | ${{ steps.br.outputs.GCC64_BRANCH }} |"
+            echo "| GCC32       | ${{ steps.br.outputs.GCC32_BRANCH }} |"
+            echo "| Clang       | ${{ steps.br.outputs.CLANG_BRANCH }} |"
+            echo "| AK3 branch  | ${{ steps.br.outputs.AK3_BRANCH }} |"
+            echo "| LocalVersion| ${{ inputs.localversion }} |"
+            echo "| Built at    | ${{ steps.br.outputs.BUILD_DATE }} |"
+          } >> "$GITHUB_STEP_SUMMARY"

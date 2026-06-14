@@ -1,6 +1,6 @@
 name: 🔥 Mi A2 Kernel Auto-Patch + Compile [MaheFooZ1710™]
 
-# ─────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────[...]
 # Repos used
 #   1. Clang   → mahefooz1710/android_prebuilts_clang_host_linux-x86_clang-5220042
 #   2. AK3     → mahefooz1710/AnyKernel3
@@ -9,7 +9,7 @@ name: 🔥 Mi A2 Kernel Auto-Patch + Compile [MaheFooZ1710™]
 #   5. Device  → mahefooz1710/android_device_xiaomi_jasmine_sprout (not used for kern build)
 #   6. Kernel  → mahefooz1710/android_kernel_xiaomi_sdm660   (compile target)
 #   GCC32      → LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9
-# ─────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────[...]
 
 on:
   workflow_dispatch:
@@ -26,7 +26,7 @@ on:
         default: "-MaheFooZ1710"
 
 env:
-  # ── User repos ─────────────────────────────────────────────────────────────
+  # ── User repos ───────────────────────────────────────────────────────────[...]
   PE_KERNEL_REPO:  "https://github.com/mahefooz1710/kernel_xiaomi_jasmine_sprout.git"
   LOS_KERNEL_REPO: "https://github.com/mahefooz1710/android_kernel_xiaomi_sdm660.git"
   CLANG_REPO:      "https://github.com/mahefooz1710/android_prebuilts_clang_host_linux-x86_clang-5220042.git"
@@ -43,11 +43,11 @@ jobs:
     timeout-minutes: 120   # FIX A7: no timeout in original
 
     steps:
-      # ════════════════════════════════════════════════════════════════════════
+      # ═══════════════════════════════════════════════════════════════[...]
       # STEP 0 — Branch auto-select
       # FIX A4,A6,A8: all branches were hardcoded; added workflow_dispatch
       #               inputs + git ls-remote auto-detection with fallback
-      # ════════════════════════════════════════════════════════════════════════
+      # ═══════════════════════════════════════════════════════════════[...]
       - name: 🔢 Auto-Select Branches
         id: br
         run: |
@@ -115,11 +115,11 @@ jobs:
           printf ' Date     : %s\n'                        "$BUILD_DATE"
           printf '════════════════════════════════════════\n\n'
 
-      # ════════════════════════════════════════════════════════════════════════
+      # ═══════════════════════════════════════════════════════════════[...]
       # STEP 1 — Install dependencies
       # FIX A9,A10: added libelf-dev python3 cpio lz4 ccache pahole;
       #             added --no-install-recommends
-      # ════════════════════════════════════════════════════════════════════════
+      # ═══════════════════════════════════════════════════════════════[...]
       - name: 📦 Install Dependencies
         run: |
           sudo apt-get update -qq
@@ -127,13 +127,13 @@ jobs:
             flex bison build-essential libssl-dev libelf-dev \
             bc wget git zip unzip python3 cpio lz4 ccache pahole
 
-      # ════════════════════════════════════════════════════════════════════════
+      # ═══════════════════════════════════════════════════════════════[...]
       # STEP 2 — Clone toolchains
       # FIX A1: Clang was tar.gz from googlesource (unreliable) → git clone
       # FIX A2: GCC64 was entirely missing → git clone from user repo
       # FIX A3: GCC32 was tar.gz from googlesource → git clone from LOS
       # FIX A5: AK3 was from osm0sis → user repo 2
-      # ════════════════════════════════════════════════════════════════════════
+      # ═══════════════════════════════════════════════════════════════[...]
       - name: 🔧 Clone Clang
         run: |
           git clone --depth=1 \
@@ -162,10 +162,10 @@ jobs:
           echo "${{ github.workspace }}/toolchain/gcc64/bin" >> "$GITHUB_PATH"
           echo "${{ github.workspace }}/toolchain/gcc32/bin" >> "$GITHUB_PATH"
 
-      # ════════════════════════════════════════════════════════════════════════
+      # ═══════════════════════════════════════════════════════════════[...]
       # STEP 3 — Clone kernels
       # FIX F1,A8: PE kernel was full-history clone → --filter=blob:none
-      # ════════════════════════════════════════════════════════════════════════
+      # ═══════════════════════════════════════════════════════════════[...]
       - name: 🌿 Clone PE Kernel (patch source)
         run: |
           git clone --filter=blob:none \
@@ -178,13 +178,13 @@ jobs:
             -b "${{ steps.br.outputs.LOS_BRANCH }}" \
             "$LOS_KERNEL_REPO" kernel
 
-      # ════════════════════════════════════════════════════════════════════════
+      # ═══════════════════════════════════════════════════════════════[...]
       # STEP 4 — Extract patches from PE kernel
       # FIX F4: no git config before operations
       # FIX F5,F6: narrow grep patterns → extended regex with alternates
       # FIX F3,F8: --zero-commit prevents filename collisions; extract helper
       # FIX F9: added success/fail counters
-      # ════════════════════════════════════════════════════════════════════════
+      # ═══════════════════════════════════════════════════════════════[...]
       - name: 🔍 Extract Patches (BFQ, BBR, simple_ondemand)
         working-directory: pe_kernel
         run: |
@@ -215,11 +215,11 @@ jobs:
           echo "── patches ──"
           ls -lh ../patches/ 2>/dev/null || echo "(none extracted)"
 
-      # ════════════════════════════════════════════════════════════════════════
+      # ═══════════════════════════════════════════════════════════════[...]
       # STEP 5 — Apply patches
       # FIX F2: --check then apply is not atomic → combined with --reject fallback
       # FIX F4: git config added
-      # ════════════════════════════════════════════════════════════════════════
+      # ═══════════════════════════════════════════════════════════════[...]
       - name: 🩹 Apply Patches to LOS Kernel
         working-directory: kernel
         run: |
@@ -246,7 +246,7 @@ jobs:
           done
           echo "Result: ✅ Applied=${APPLIED}  ⚠️ Failed=${FAILED}"
 
-      # ════════════════════════════════════════════════════════════════════════
+      # ═══════════════════════════════════════════════════════════════[...]
       # STEP 6 — Generate defconfig
       # FIX B1:  scripts/config was called as `cd out && scripts/config`
       #          → scripts/config does not exist in out/; fixed with --file flag
@@ -263,7 +263,7 @@ jobs:
       # FIX B14: CONFIG_CPU_FREQ_DEFAULT_GOV_SCHEDUTIL added
       # FIX C30,C31: added KBUILD_BUILD_USER / KBUILD_BUILD_HOST
       # FIX C26: CONFIG_LOCALVERSION set from workflow input
-      # ════════════════════════════════════════════════════════════════════════
+      # ═══════════════════════════════════════════════════════════════[...]
       - name: ⚙️ Generate Defconfig
         working-directory: kernel
         env:
@@ -334,7 +334,7 @@ jobs:
           # Resolve Kconfig dependencies
           make ARCH=arm64 O=out olddefconfig
 
-      # ════════════════════════════════════════════════════════════════════════
+      # ═══════════════════════════════════════════════════════════════[...]
       # STEP 7 — Compile
       # FIX C27: GCC64 now in PATH (was missing)
       # FIX C28: PATH expansion fixed via GITHUB_PATH (not step env override)
@@ -342,7 +342,7 @@ jobs:
       # FIX C32: build log captured → tee build.log
       # FIX C33: post-build image existence check
       # FIX C34: ccache enabled
-      # ════════════════════════════════════════════════════════════════════════
+      # ═══════════════════════════════════════════════════════════════[...]
       - name: 🔨 Compile Kernel
         working-directory: kernel
         env:
@@ -373,7 +373,7 @@ jobs:
             exit 1
           fi
 
-      # ════════════════════════════════════════════════════════════════════════
+      # ═══════════════════════════════════════════════════════════════[...]
       # STEP 8 — Boot tuning script
       # FIX D1:  shebang #!/system/bin/sh → #!/sbin/sh (overlay.d context)
       # FIX D2:  ZRAM: check if already configured before writing
@@ -392,7 +392,7 @@ jobs:
       # FIX D15: CPU big/little split via cpufreq/policy* + affected_cpus
       # FIX D16: ZRAM comp_algorithm=lz4 set before disksize
       # FIX D38: ZRAM comp_algorithm set; disksize as 50% RAM (not hardcoded 1GB)
-      # ════════════════════════════════════════════════════════════════════════
+      # ═══════════════════════════════════════════════════════════════[...]
       - name: 📝 Create Boot Tuning Script
         run: |
           mkdir -p anykernel/ramdisk/overlay.d/sbin
@@ -429,14 +429,14 @@ for dev in /sys/block/mmcblk0 /sys/block/sda /sys/block/sdb; do
   echo 0   > "${q}/add_random"    2>/dev/null || true
 done
 
-# ── VM / Memory ─────────────────────────────────────────────────────────────
+# ── VM / Memory ───────────────────────────────────────────────────────────[...]
 echo 100 > /proc/sys/vm/swappiness
 echo 80  > /proc/sys/vm/vfs_cache_pressure
 echo 10  > /proc/sys/vm/dirty_ratio
 echo 5   > /proc/sys/vm/dirty_background_ratio
 echo madvise > /sys/kernel/mm/transparent_hugepage/enabled 2>/dev/null || true
 
-# ── Network ─────────────────────────────────────────────────────────────────
+# ── Network ─────────────────────────────────────────────────────────────[...]
 echo 1 > /proc/sys/net/ipv4/tcp_fastopen   # client-side only (not 3 = server+client)
 
 # ── Sched features (requires CONFIG_SCHED_DEBUG, skip otherwise) ─────────────
@@ -497,7 +497,7 @@ service jasmine_tweaks /sbin/jasmine_tweaks.sh
     seclabel u:r:shell:s0
 INITRC
 
-      # ════════════════════════════════════════════════════════════════════════
+      # ═══════════════════════════════════════════════════════════════[...]
       # STEP 9 — Package with AnyKernel3
       # FIX A5:  AK3 from user repo 2 (not osm0sis)
       # FIX E1:  Image.gz-dtb copy with no fallback → loop over all variants
@@ -510,7 +510,7 @@ INITRC
       # FIX E10: silent cp fail → replaced with explicit check
       # FIX E11: DTB copy added if separate dtbs produced
       # FIX E12: retention-days=30 added
-      # ════════════════════════════════════════════════════════════════════════
+      # ═══════════════════════════════════════════════════════════════[...]
       - name: 📦 Package with AnyKernel3
         run: |
           git clone --depth=1 \
@@ -586,13 +586,13 @@ AKSH
           echo "ZIP_NAME=${ZIP_NAME}" >> "$GITHUB_ENV"
           echo "✅ Packaged: ${ZIP_NAME} ($(du -sh ${ZIP_NAME} | cut -f1))"
 
-      # ════════════════════════════════════════════════════════════════════════
+      # ═══════════════════════════════════════════════════════════════[...]
       # STEP 10 — Upload
       # FIX U1: upload-artifact@v3 deprecated → v4
       # FIX U2: retention-days added
       # FIX U3: build.log included in upload
       # FIX U4: artifact name includes branch + date (was static "MiA2_Ultimate_Kernel")
-      # ════════════════════════════════════════════════════════════════════════
+      # ═══════════════════════════════════════════════════════════════[...]
       - name: 📤 Upload Kernel + Build Log
         uses: actions/upload-artifact@v4
         with:
@@ -602,9 +602,9 @@ AKSH
             build.log
           retention-days: 30
 
-      # ════════════════════════════════════════════════════════════════════════
+      # ═══════════════════════════════════════════════════════════════[...]
       # STEP 11 — GitHub Step Summary (always runs, even on failure)
-      # ════════════════════════════════════════════════════════════════════════
+      # ═══════════════════════════════════════════════════════════════[...]
       - name: 📋 Build Summary
         if: always()
         run: |
